@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>ПЗ: Инфляция в логистике — офлайн (v2)</title>
+<style>
+:root{--bg:#f6f7fb;--card:#fff;--txt:#0f172a;--mut:#475569;--line:#e2e8f0;--acc:#111827;--ok:#059669;--bad:#dc2626;--w:1200px}
+*{box-sizing:border-box} html,body{margin:0} body{background:var(--bg);color:var(--txt);font:15px/1.6 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial}
+.container{max-width:var(--w);margin:auto;padding:16px 18px}
+.card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px;margin:10px 0}
+h1{font-size:22px;margin:0 0 8px} h2{font-size:18px;margin:0 0 8px}
+.small{font-size:12px;color:var(--mut)} .right{margin-left:auto}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+input,select,button{border:1px solid var(--line);border-radius:10px;padding:9px 10px;background:#fff}
+button{cursor:pointer}.primary{background:var(--acc);color:#fff;border-color:var(--acc)}
+table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid var(--line);padding:8px;text-align:left}th{background:#f1f5f9}
+.stat{border:1px solid var(--line);border-radius:12px;padding:10px;background:#f8fafc;display:flex;justify-content:space-between;align-items:center}
+.badge{padding:2px 8px;border-radius:999px;border:1px solid #e5e7eb;font-size:12px}
+.ok{background:#ecfdf5;border-color:#a7f3d0;color:var(--ok)} .bad{background:#fee2e2;border-color:#fecaca;color:var(--bad)}
+ul.list{padding-left:18px;margin:0} ul.list li{margin:6px 0}
+a{color:#2563eb;text-decoration:none} a:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>ПЗ: Инфляция в логистике — офлайн (v2)</h1>
+  <div class="small">Работает при открытии локально в Chrome (file://). Без сохранений и без отправки e‑mail — только скачивание JSON.</div>
+
+  <section class="card">
+    <h2>1) Корзина затрат</h2>
+    <div class="row">
+      <label class="small">Набор данных</label>
+      <select id="dataset" style="min-width:360px"></select>
+      <button id="reset">Сбросить набор</button>
+      <span class="small right">Редактируйте p₀/p₁ и q₀ прямо в таблице.</span>
+    </div>
+    <div style="overflow:auto;margin-top:8px">
+      <table>
+        <thead><tr><th>Статья</th><th>Цена p₀</th><th>Цена p₁</th><th>Кол-во q₀</th><th>Удалить</th></tr></thead>
+        <tbody id="tbody"></tbody>
+        <tfoot>
+          <tr>
+            <td><input id="new_name" placeholder="Новая статья (напр., ГСМ)"></td>
+            <td><input id="new_p0" type="number" step="0.01" placeholder="0"></td>
+            <td><input id="new_p1" type="number" step="0.01" placeholder="0"></td>
+            <td><input id="new_q0" type="number" step="0.01" placeholder="1" value="1"></td>
+            <td><button id="add" class="primary">Добавить</button></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>2) Результаты</h2>
+    <div class="stat"><span class="small">CPI (Ласпейрес)</span><b id="cpiL">—</b></div>
+    <div class="stat"><span class="small">Инфляция за период</span><b id="infl">—</b></div>
+    <div class="stat"><span class="small">Годовой темп (annualized)</span><b id="annual">—</b></div>
+    <div style="border-top:1px solid var(--line);margin-top:8px;padding-top:8px">
+      <b>Вклады статей (п.п.)</b>
+      <div id="contrib" class="small"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>3) Задания</h2>
+    <ol id="tasks" class="list"></ol>
+    <div class="row small"><span>Проценты вводите как число (например, 1.25).</span><span class="right">Результат: <b id="score">0</b> / <span id="total">0</span></span></div>
+  </section>
+
+  <section class="card">
+    <h2>4) Экспорт результата</h2>
+    <div class="row">
+      <div><label class="small">ФИО</label><input id="st_name" placeholder="Иванов И.И."></div>
+      <div><label class="small">Группа</label><input id="st_group" placeholder="Л-21"></div>
+      <div><label class="small">Ваш e‑mail (опц.)</label><input id="st_email" type="email" placeholder="student@example.com"></div>
+      <div><label class="small">Комментарий</label><input id="st_comment" placeholder="Комментарий"></div>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button id="btnJSON" class="primary">Скачать JSON и отправить на почту преподавателя вручную</button>
+      <span class="small right">Адрес преподавателя: <b>vanya.muzychenko@gmail.com</b></span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Теория и источники</h2>
+    <ul class="list small">
+      <li><b>Индекс Ласпейреса:</b> CPI = Σ(p₁·q₀)/Σ(p₀·q₀), инфляция π = CPI − 1.</li>
+      <li><b>Деньги и платёжный оборот:</b> функции денег; скорость обращения V = PY/M.</li>
+    </ul>
+    <div class="small"><b>Учебники (Юрайт):</b>
+      <ul class="list">
+        <li>Чалдаева Л.А. и др., 2022 — <a target="_blank" href="https://urait.ru/bcode/489654">urait.ru/bcode/489654</a></li>
+        <li>Аврамчикова Н.Т., Ерыгина Л.В., 2024 — <a target="_blank" href="https://urait.ru/bcode/535330">urait.ru/bcode/535330</a></li>
+        <li>Биткина И.К., 2024 — <a target="_blank" href="https://urait.ru/bcode/541771">urait.ru/bcode/541771</a></li>
+        <li>Чалдаева Л.А. и др., 2024 — <a target="_blank" href="https://urait.ru/bcode/543697">urait.ru/bcode/543697</a></li>
+        <li>Иванова Н.Г. и др., 2024 — <a target="_blank" href="https://urait.ru/bcode/544062">urait.ru/bcode/544062</a></li>
+      </ul>
+    </div>
+  </section>
+</div>
+
+<script>
+(function(){
+  // Чистый офлайн: без localStorage, fetch, crypto
+  const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
+  function toNum(x,fb){ const v=Number(String(x).replace(',','.')); return Number.isFinite(v)?v:fb; }
+  function pct(x){ return (x*100).toFixed(2)+'%'; }
+  function esc(s){ return String(s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+
+  // Генератор id без crypto
+  let _id = 0; function uid(){ _id++; return 'row_'+_id; }
+  function R(name,p0,p1,q0){ return {id:uid(), name, p0, p1, q0}; }
+
+  const DATASETS = {
+    "Минимальный пример (3 строки)": [
+      R("ДТ (топливо)", 25000, 26000, 1000),
+      R("Аренда склада", 90000, 91800, 1),
+      R("З/п водителей", 320000, 326400, 1)
+    ],
+    "ООО «Логистик‑Плюс» (апр→май)": [
+      R("ДТ (топливо)", 25000, 24500, 1000),
+      R("Шины и ЗИП", 12000, 12840, 10),
+      R("Аренда склада", 90000, 91800, 1),
+      R("З/п водителей", 320000, 326400, 1),
+      R("Платные дороги", 15000, 15750, 1),
+      R("Упаковка/паллеты", 22000, 23100, 1)
+    ]
+  };
+  function clone(arr){ return arr.map(x=>({id:uid(), name:x.name, p0:x.p0, p1:x.p1, q0:x.q0})); }
+
+  const state = { datasetKey: Object.keys(DATASETS)[0], rows: clone(DATASETS[Object.keys(DATASETS)[0]]), answers: {} };
+
+  // UI
+  const sel = $('#dataset'); Object.keys(DATASETS).forEach(k=>{ const o=document.createElement('option'); o.value=k; o.textContent=k; sel.appendChild(o); }); sel.value=state.datasetKey;
+  const tbody = $('#tbody');
+
+  function renderTable(){
+    tbody.innerHTML='';
+    state.rows.forEach(row=>{
+      const tr=document.createElement('tr');
+      tr.innerHTML = '<td><input data-id="'+row.id+'" data-f="name" value="'+esc(row.name)+'"></td>' +
+                     '<td><input data-id="'+row.id+'" data-f="p0" type="number" step="0.01" value="'+row.p0+'"></td>' +
+                     '<td><input data-id="'+row.id+'" data-f="p1" type="number" step="0.01" value="'+row.p1+'"></td>' +
+                     '<td><input data-id="'+row.id+'" data-f="q0" type="number" step="0.01" value="'+row.q0+'"></td>' +
+                     '<td><button data-id="'+row.id+'" class="del">×</button></td>';
+      tbody.appendChild(tr);
+    });
+  }
+
+  function metrics(rows){
+    const sum=function(a){return a.reduce(function(x,y){return x+y},0)};
+    const base = sum(rows.map(r=>toNum(r.p0,0)*toNum(r.q0,0)));
+    const cur  = sum(rows.map(r=>toNum(r.p1,0)*toNum(r.q0,0)));
+    const cpi  = cur/(base||1);
+    const monthly = cpi - 1;
+    const annual  = Math.pow(1+monthly,12)-1;
+    const w = rows.map(r=>(toNum(r.p0,0)*toNum(r.q0,0))/(base||1));
+    const rel = rows.map(r=>(toNum(r.p1,0)||0)/(toNum(r.p0,0)||1));
+    const contrib = w.map((wi,i)=> wi*(rel[i]-1));
+    return {base,cpi,monthly,annual,w,rel,contrib,rows};
+  }
+
+  function renderStats(m){
+    $('#cpiL').textContent = m.cpi.toFixed(4);
+    $('#infl').textContent = pct(m.monthly);
+    $('#annual').textContent = pct(m.annual);
+    const box = $('#contrib'); box.innerHTML='';
+    m.rows.forEach((r,i)=>{
+      const d=document.createElement('div'); d.className='row';
+      d.innerHTML = '<span>'+esc(r.name)+'</span><span class="right small">'+(m.contrib[i]*100).toFixed(2)+' п.п.</span>';
+      box.appendChild(d);
+    });
+  }
+
+  function buildTasks(m){
+    const maxI = m.rows.length ? m.contrib.reduce(function(i,_,k){return m.contrib[k]>m.contrib[i]?k:i},0) : 0;
+    return [
+      {key:'t1', text:'1) Инфляция за период (в %):', correct:(m.monthly*100), tol:0.2, type:'num'},
+      {key:'t2', text:'2) Годовой темп (annualized, в %):', correct:(m.annual*100), tol:0.3, type:'num'},
+      {key:'t3', text:'3) Какая статья даёт наибольший вклад? (точное название):', correct:(m.rows[maxI]?m.rows[maxI].name:''), tol:0, type:'text'}
+    ];
+  }
+
+  function renderTasks(m){
+    const tasks = buildTasks(m); $('#total').textContent = tasks.length;
+    const box = $('#tasks'); box.innerHTML='';
+    tasks.forEach(function(t){
+      const li=document.createElement('li');
+      const val=state.answers[t.key];
+      li.innerHTML = '<div>'+t.text+'</div><div class="row">' +
+        (t.type==='num'
+          ? '<input data-k="'+t.key+'" type="number" step="0.01" placeholder="0.00" value="'+((typeof val==='number' && !Number.isNaN(val))?val:'')+'">'
+          : '<input data-k="'+t.key+'" type="text" placeholder="например, ДТ (топливо)" value="'+(val?esc(val):'')+'">') +
+        '<span class="badge right">'+(typeof val==='undefined'?'':(check(t,val)?'верно':'проверьте'))+'</span></div>';
+      box.appendChild(li);
+    });
+  }
+
+  function check(t, ans){
+    if(t.type==='num'){ if(typeof ans!=='number' || Number.isNaN(ans)) return false; return Math.abs(ans - t.correct) <= t.tol; }
+    return String(ans||'').trim().toLowerCase() === String(t.correct||'').trim().toLowerCase();
+  }
+
+  function updateScore(){
+    const m=metrics(state.rows); const tasks = buildTasks(m); let s=0;
+    tasks.forEach(function(t){ if(check(t, state.answers[t.key])) s++; });
+    $('#score').textContent = s;
+  }
+
+  // Делегирование: правки в таблице + удаление по клику
+  tbody.addEventListener('input', onEdit);
+  tbody.addEventListener('change', onEdit);
+  tbody.addEventListener('click', function(e){
+    const t=e.target;
+    if(t.classList && t.classList.contains('del')){
+      const id=t.getAttribute('data-id');
+      state.rows = state.rows.filter(function(r){ return r.id!==id; });
+      renderTable(); updateAll();
+    }
+  });
+
+  function onEdit(e){
+    const t=e.target;
+    if(t.tagName==='INPUT' && t.getAttribute('data-id')){
+      const id=t.getAttribute('data-id'), f=t.getAttribute('data-f');
+      const row=state.rows.find(function(r){return r.id===id}); if(!row) return;
+      if(f==='name'){ row.name = t.value; } else { row[f] = toNum(t.value, row[f]); }
+      updateAll();
+    }
+  }
+
+  // Смена набора, сброс, добавление
+  $('#dataset').addEventListener('change', function(){
+    state.datasetKey = $('#dataset').value;
+    state.rows = clone(DATASETS[state.datasetKey]);
+    renderTable(); updateAll();
+  });
+  $('#reset').addEventListener('click', function(){
+    state.rows = clone(DATASETS[state.datasetKey]);
+    renderTable(); updateAll();
+  });
+  $('#add').addEventListener('click', function(){
+    const name=$('#new_name').value.trim(); if(!name) return;
+    const p0=toNum($('#new_p0').value,0), p1=toNum($('#new_p1').value,0), q0=toNum($('#new_q0').value,1);
+    state.rows.push(R(name,p0,p1,q0));
+    $('#new_name').value=''; $('#new_p0').value=''; $('#new_p1').value=''; $('#new_q0').value='1';
+    renderTable(); updateAll();
+  });
+
+  // Ответы на задания
+  const tasksBox = $('#tasks');
+  tasksBox.addEventListener('input', onTask);
+  tasksBox.addEventListener('change', onTask);
+  function onTask(e){
+    const t=e.target; if(t.tagName!=='INPUT' || !t.getAttribute('data-k')) return;
+    const m=metrics(state.rows);
+    const key=t.getAttribute('data-k');
+    const task = buildTasks(m).find(function(x){return x.key===key});
+    const val = task.type==='num' ? toNum(t.value, NaN) : t.value;
+    state.answers[task.key] = val;
+    const badge = t.parentElement.querySelector('.badge');
+    if((task.type==='num' && Number.isNaN(val)) || (task.type==='text' && !val)){ badge.textContent=''; badge.className='badge right'; }
+    else { const ok = check(task,val); badge.textContent = ok? 'верно':'проверьте'; badge.className='badge right '+(ok?'ok':'bad'); }
+    updateScore();
+  }
+
+  // Экспорт JSON
+  $('#btnJSON').addEventListener('click', function(){
+    const m = metrics(state.rows);
+    const data = {
+      when: new Date().toISOString(),
+      datasetKey: state.datasetKey,
+      student: {
+        name: $('#st_name').value.trim(),
+        group: $('#st_group').value.trim(),
+        email: $('#st_email').value.trim(),
+        comment: $('#st_comment').value.trim()
+      },
+      metrics: { cpiL: m.cpi, monthly: m.monthly, annualized: m.annual, base: m.base },
+      basket: state.rows,
+      answers: state.answers
+    };
+    const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob); const a = document.createElement('a');
+    a.href = url; a.download = 'inflation_result.json'; a.click(); URL.revokeObjectURL(url);
+    alert('Файл inflation_result.json скачан. Отправьте его на почту преподавателя: vanya.muzychenko@gmail.com');
+  });
+
+  function updateAll(){
+    const m = metrics(state.rows);
+    renderStats(m); renderTasks(m); updateScore();
+  }
+
+  // Старт
+  renderTable(); updateAll();
+})();
+</script>
+</body>
+</html>
